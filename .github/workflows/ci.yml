@@ -1,0 +1,24 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: pytest -q
+      - name: Audit the demo (the demo is meant to fail the gate)
+        shell: bash
+        run: |
+          set +e
+          baqueano scan -c examples/yerba-labs/mcp.json -t examples/yerba-labs/tools.json \
+            -b examples/yerba-labs/baseline.json --fail-on high -o reports
+          test $? -eq 1
