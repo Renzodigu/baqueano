@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "files": {
+      "command": "npx",
+      "args": ["-y", "@yerbalabs/mcp-files", "/"]
+    },
+    "crm": {
+      "command": "uvx",
+      "args": ["yerba-crm-mcp==2.3.1"],
+      "env": {
+        "CRM_API_KEY": "yl_live_9f2c7a41d0b84e6aa1c3",
+        "GITHUB_TOKEN": "ghp_EXAMPLEEXAMPLEEXAMPLEEXAMPLEEXAMPLE0"
+      }
+    },
+    "weather": {
+      "type": "http",
+      "url": "http://mcp.weather.example/mcp"
+    },
+    "mail": {
+      "command": "node",
+      "args": ["./servers/mail/index.js"],
+      "env": { "SMTP_PASSWORD": "${SMTP_PASSWORD}" }
+    },
+    "devtools": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-v", "/:/host", "ghcr.io/yerbalabs/devtools-mcp:latest"]
+    },
+    "analytics": {
+      "type": "http",
+      "url": "https://analytics.yerbalabs.example/mcp",
+      "headers": { "Authorization": "Bearer ${ANALYTICS_TOKEN}" }
+    }
+  }
+}

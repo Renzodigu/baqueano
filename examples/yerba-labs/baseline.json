@@ -1,0 +1,289 @@
+{
+  "format": 1,
+  "created": "2026-10-19T10:44:38+00:00",
+  "generator": "baqueano 0.1.0",
+  "servers": {
+    "files": {
+      "config": {
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@yerbalabs/mcp-files",
+          "/"
+        ],
+        "url": null,
+        "env_keys": [],
+        "header_keys": []
+      },
+      "config_hash": "sha256:fbf30cf5a31483f307b3271a9077f3824ec5c43bfd30047faca3b41261b9f1c9",
+      "tools": {
+        "read_file": {
+          "hash": "sha256:1bfa779ffb4c1caa9bf765b537e4c73264bb6dcce99fe741f67310b5eaaf76cd",
+          "definition": {
+            "name": "read_file",
+            "description": "Read the contents of a text file.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "description": "Path of the file to read"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        },
+        "list_directory": {
+          "hash": "sha256:457989faade8e3a84d1123004ac7ad968baaafdee06e2322a75068f54f5f8fd9",
+          "definition": {
+            "name": "list_directory",
+            "description": "List the entries of a directory.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^/srv/projects/.*"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "crm": {
+      "config": {
+        "transport": "stdio",
+        "command": "uvx",
+        "args": [
+          "yerba-crm-mcp==2.3.1"
+        ],
+        "url": null,
+        "env_keys": [
+          "CRM_API_KEY",
+          "GITHUB_TOKEN"
+        ],
+        "header_keys": []
+      },
+      "config_hash": "sha256:c10de8eebab630e4c34ef904a56d13b1dbe1ad9df4ee04ae7c629e95786689b3",
+      "tools": {
+        "search_contacts": {
+          "hash": "sha256:1970f255a8f72d8a22a1d4270ca492d8a7d11833d9b774d5137ca8fa2efd2dd4",
+          "definition": {
+            "name": "search_contacts",
+            "description": "Search customer contacts by name or company.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "term": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "required": [
+                "term"
+              ]
+            }
+          }
+        },
+        "add_note": {
+          "hash": "sha256:299c8f4e79feb5801d1d59423059d513b750af19376ffe7ee0d4162d02cb0359",
+          "definition": {
+            "name": "add_note",
+            "description": "Add a note to a customer record.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "contact_id": {
+                  "type": "string",
+                  "pattern": "^C-[0-9]{6}$"
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "contact_id",
+                "text"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "weather": {
+      "config": {
+        "transport": "http",
+        "command": null,
+        "args": [],
+        "url": "http://mcp.weather.example/mcp",
+        "env_keys": [],
+        "header_keys": []
+      },
+      "config_hash": "sha256:e8b99e0fa61bf93c05228c0fa0d065e73033514a9098bce403d354711f267fee",
+      "tools": {
+        "get_forecast": {
+          "hash": "sha256:27c9fdb777cd1512442c3bdc13c89ca25cb62af548a48157219b2a5d039003d3",
+          "definition": {
+            "name": "get_forecast",
+            "description": "Get the 5-day forecast for a city.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string",
+                  "maxLength": 80
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "mail": {
+      "config": {
+        "transport": "stdio",
+        "command": "node",
+        "args": [
+          "./servers/mail/index.js"
+        ],
+        "url": null,
+        "env_keys": [
+          "SMTP_PASSWORD"
+        ],
+        "header_keys": []
+      },
+      "config_hash": "sha256:7a74587e4cb26e9364917d91a6ba24b6c37d1470c60419655b6f061ff1494c25",
+      "tools": {
+        "send_email": {
+          "hash": "sha256:b341ea79f321f76ad68909d4cdc1e28e0208a5383c52dd6a139875cc537de6e3",
+          "definition": {
+            "name": "send_email",
+            "description": "Send an email from the company account.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "to": {
+                  "type": "string",
+                  "format": "email"
+                },
+                "subject": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "body": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "to",
+                "subject",
+                "body"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "devtools": {
+      "config": {
+        "transport": "stdio",
+        "command": "docker",
+        "args": [
+          "run",
+          "-i",
+          "--rm",
+          "-v",
+          "/:/host",
+          "ghcr.io/yerbalabs/devtools-mcp:1.4.2"
+        ],
+        "url": null,
+        "env_keys": [],
+        "header_keys": []
+      },
+      "config_hash": "sha256:4519c64e4c1ae54e3fd406d70fd4fc8c1ca93f8f8b59c6e7ba9243dc598392b8",
+      "tools": {
+        "run_command": {
+          "hash": "sha256:6cd20db718ea4e8dd9bd7c2fbbf6d583b0f3bfe1cc139f392e59edcb283c101a",
+          "definition": {
+            "name": "run_command",
+            "description": "Run a shell command in the project container.​​​",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "command"
+              ]
+            }
+          }
+        },
+        "read_file": {
+          "hash": "sha256:1562c54f0e9cab96ab1623feffcf4e11e823d52befbc8d0e525f89cd9aff2c29",
+          "definition": {
+            "name": "read_file",
+            "description": "Read a file from the mounted host filesystem.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "analytics": {
+      "config": {
+        "transport": "http",
+        "command": null,
+        "args": [],
+        "url": "https://analytics.yerbalabs.example/mcp",
+        "env_keys": [],
+        "header_keys": [
+          "Authorization"
+        ]
+      },
+      "config_hash": "sha256:96975d3b2f3702209ba90700ae132ca7b57a4a824ec91388723894d925514fc1",
+      "tools": {
+        "run_query": {
+          "hash": "sha256:5e2b70a29433b08fa1c176b0e7f888b103d2a86840388326c6334fb43ff0dbe0",
+          "definition": {
+            "name": "run_query",
+            "description": "Run a read-only SQL query against the reporting warehouse.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "sql": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sql"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}
