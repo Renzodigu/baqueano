@@ -4,6 +4,8 @@
 
 ![CI](https://github.com/Renzodigu/baqueano/actions/workflows/ci.yml/badge.svg)
 
+![HTML audit report for the demo: critical posture, 23 findings by severity and the OWASP MCP Top 10 grid coloured by the highest severity found in each risk](docs/img/report-overview.png)
+
 *Baqueano* is the Argentine word for the guide who knows the terrain and warns you
 before you walk into trouble. This tool does that for the Model Context Protocol (MCP):
 before an AI agent is connected to a set of MCP servers, it reviews what those servers
@@ -16,8 +18,9 @@ audit side:
 - **Every finding is mapped** to the [OWASP MCP Top 10](https://owasp.org/www-project-mcp-top-10/)
   and to **ISO/IEC 27001:2022 Annex A** controls.
 - **Outputs are audit artefacts**: an audit report with an executive summary and
-  coverage table, a machine-readable JSON, and a **CSV risk register** with corrective
-  action, target remediation window, owner and status columns.
+  coverage table (Markdown or a self-contained HTML page), a machine-readable JSON, and
+  a **CSV risk register** with corrective action, target remediation window, owner and
+  status columns.
 - **Rug pulls are handled as a reconciliation.** You pin an approved baseline after a
   review; every later audit reconciles the current servers and tool definitions against
   it, line by line, and classifies each difference as *added*, *modified* or *removed*.
@@ -34,7 +37,7 @@ pip install -e .            # or: python -m baqueano ...
 baqueano scan --config examples/yerba-labs/mcp.json \
               --tools  examples/yerba-labs/tools.json \
               --baseline examples/yerba-labs/baseline.json \
-              --format md,json,csv --out-dir reports/
+              --format md,html,json,csv --out-dir reports/
 
 # After reviewing and approving the current state, pin it as the baseline
 baqueano pin --config mcp.json --tools tools.json --output baseline.json
@@ -92,9 +95,19 @@ changed things:
 
 The generated outputs are in [`examples/yerba-labs/report`](examples/yerba-labs/report):
 [audit report](examples/yerba-labs/report/audit-report.md),
-[risk register](examples/yerba-labs/report/risk-register.csv) and
+[HTML report](examples/yerba-labs/report/audit-report.html) (download it and open it in a
+browser), [risk register](examples/yerba-labs/report/risk-register.csv) and
 [JSON](examples/yerba-labs/report/audit-report.json). All names, domains, tokens and
 data in the demo are invented.
+
+The HTML report shows the posture, the OWASP MCP Top 10 coverage, a server by severity
+heat map and, for every component that changed since the baseline, the approved and the
+current definition side by side with the additions highlighted: the rug pull in
+`crm/add_note` is visible at a glance. Everything in it that comes from the audited
+servers is escaped, hidden characters are highlighted, and a Content-Security-Policy
+blocks remote loads and every script except the page's own severity filter.
+
+![Baseline diff for crm/add_note: the approved description is one sentence; the current one adds a hidden instruction to read ~/.ssh/id_rsa, and the input schema gains a sidenote parameter](docs/img/rug-pull-diff.png)
 
 ## How it fits into a review process
 

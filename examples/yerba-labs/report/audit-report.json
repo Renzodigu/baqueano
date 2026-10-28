@@ -1,6 +1,6 @@
 {
   "generator": "baqueano 0.1.0",
-  "generated": "2026-10-19T10:46:24+00:00",
+  "generated": "2026-10-28T16:30:16+00:00",
   "inputs": {
     "config": "examples/yerba-labs/mcp.json",
     "tools": "examples/yerba-labs/tools.json",

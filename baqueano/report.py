@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from collections import Counter
 
 from . import __version__
@@ -24,8 +25,27 @@ TARGET_DAYS = {Severity.CRITICAL: 1, Severity.HIGH: 7, Severity.MEDIUM: 30,
                Severity.LOW: 90, Severity.INFO: None}
 
 
+_HIDDEN = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff"
+                     r"\U000e0000-\U000e007f]")
+
+
+def _visible(text: str) -> str:
+    """Show hidden characters as escapes: the reviewer must see what the model would read."""
+    return _HIDDEN.sub(lambda m: f"\\u{ord(m.group()):04x}" if ord(m.group()) < 0x10000
+                       else f"\\U{ord(m.group()):08x}", str(text))
+
+
 def _md(text: str) -> str:
-    return str(text).replace("|", "\\|").replace("\n", " ")
+    return _visible(text).replace("|", "\\|").replace("\n", " ")
+
+
+def _code(text: str, in_table: bool = False) -> str:
+    """Untrusted text (tool names, descriptions) as an inline code span, so it cannot inject Markdown or HTML."""
+    text = _visible(text).replace("\n", " ").replace("\r", " ")
+    fence = "`" * (max((len(r) for r in re.findall(r"`+", text)), default=0) + 1)
+    pad = " " if text.startswith("`") or text.endswith("`") else ""
+    span = f"{fence}{pad}{text}{pad}{fence}"
+    return span.replace("|", "\\|") if in_table else span
 
 
 def _iso(codes: list[str]) -> str:
@@ -86,7 +106,8 @@ def to_markdown(result: AuditResult) -> str:
         w("| ID | Severity | Server | Tool | Finding | OWASP | ISO 27001 |")
         w("|---|---|---|---|---|---|---|")
         for f in result.findings:
-            w(f"| {f.finding_id} | {f.severity.label} | {_md(f.server)} | {_md(f.tool or '-')} | "
+            tool = _code(f.tool, in_table=True) if f.tool else "-"
+            w(f"| {f.finding_id} | {f.severity.label} | {_code(f.server, in_table=True)} | {tool} | "
               f"{_md(f.title)} | {', '.join(f.owasp)} | {_iso(f.iso27001)} |")
         w("")
 
@@ -95,11 +116,11 @@ def to_markdown(result: AuditResult) -> str:
             w(f"### {f.finding_id} - {f.title}\n")
             w(f"- **Severity:** {f.severity.label}  ")
             w(f"- **Rule:** {f.rule_id}  ")
-            w(f"- **Server / tool:** `{f.server}`" + (f" / `{f.tool}`" if f.tool else "") + "  ")
-            w(f"- **Location:** `{f.location}`  ")
-            w(f"- **Evidence:** {_md(f.evidence)}  ")
-            w(f"- **OWASP MCP:** " + ", ".join(f"{o} {OWASP_MCP_TOP10[o]}" for o in f.owasp) + "  ")
-            w(f"- **ISO 27001:2022:** " + "; ".join(
+            w(f"- **Server / tool:** {_code(f.server)}" + (f" / {_code(f.tool)}" if f.tool else "") + "  ")
+            w(f"- **Location:** {_code(f.location)}  ")
+            w(f"- **Evidence:** {_code(f.evidence)}  ")
+            w("- **OWASP MCP:** " + ", ".join(f"{o} {OWASP_MCP_TOP10[o]}" for o in f.owasp) + "  ")
+            w("- **ISO 27001:2022:** " + "; ".join(
                 f"A.{c} {ISO27001_A.get(c, '')}" for c in f.iso27001) + "  ")
             w(f"- **Recommendation:** {f.recommendation}\n")
 
@@ -139,13 +160,20 @@ REGISTER_COLUMNS = [
 ]
 
 
+def csv_safe(value):
+    """Tool names and descriptions come from the server: =HYPERLINK(...) must not become a live formula."""
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + value
+    return value
+
+
 def to_risk_register(result: AuditResult) -> str:
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(REGISTER_COLUMNS)
     for f in result.findings:
         days = TARGET_DAYS[f.severity]
-        writer.writerow([
+        writer.writerow(csv_safe(v) for v in [
             f.finding_id, f.rule_id, f.severity.label, f.server, f.tool or "", f.title,
             f.evidence, f.location, "; ".join(f.owasp), "; ".join(_iso(f.iso27001).split(", ")),
             f.recommendation, "" if days is None else days, "", "Open", "",
