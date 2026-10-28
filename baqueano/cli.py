@@ -1,7 +1,7 @@
 """Command-line interface.
 
     baqueano scan --config mcp.json [--tools tools.json] [--baseline baseline.json]
-                  [--out-dir reports/] [--format md,json,csv] [--fail-on high]
+                  [--out-dir reports/] [--format md,html,json,csv] [--fail-on high]
     baqueano pin  --config mcp.json [--tools tools.json] --output baseline.json
     baqueano rules
 """
@@ -14,6 +14,7 @@ from pathlib import Path
 from . import __version__
 from .audit import run_audit
 from .baseline import save_baseline
+from .html_report import to_html
 from .loader import ConfigError, load
 from .models import Severity
 from .report import to_json, to_markdown, to_risk_register
@@ -21,6 +22,7 @@ from .rules import RULES
 
 FORMATS = {
     "md": ("audit-report.md", to_markdown),
+    "html": ("audit-report.html", to_html),
     "json": ("audit-report.json", to_json),
     "csv": ("risk-register.csv", to_risk_register),
 }
@@ -38,7 +40,8 @@ def _scan(args: argparse.Namespace) -> int:
         out.mkdir(parents=True, exist_ok=True)
         for fmt in formats:
             filename, render = FORMATS[fmt]
-            (out / filename).write_text(render(result), encoding="utf-8")
+            # newline="": the csv module already ends rows with \r\n; on Windows text mode would make it \r\r\n
+            (out / filename).write_text(render(result), encoding="utf-8", newline="" if fmt == "csv" else None)
     else:
         for fmt in formats:
             sys.stdout.write(FORMATS[fmt][1](result))
@@ -85,7 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--tools", "-t", help="tool manifest (tools/list output per server)")
     scan.add_argument("--baseline", "-b", help="approved baseline to reconcile against")
     scan.add_argument("--out-dir", "-o", help="write reports to this directory instead of stdout")
-    scan.add_argument("--format", "-f", default="md", help="comma-separated: md,json,csv (default md)")
+    scan.add_argument("--format", "-f", default="md", help="comma-separated: md,html,json,csv (default md)")
     scan.add_argument("--fail-on", help="exit 1 if any finding is at or above this severity (CI)")
     scan.set_defaults(func=_scan)
 

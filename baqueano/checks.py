@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from typing import Iterator
+from collections.abc import Iterator
 from urllib.parse import parse_qsl, urlparse
 
 from .models import Finding, Server, Severity, Tool
@@ -143,6 +143,44 @@ def check_secrets(server: Server) -> list[Finding]:
     return findings
 
 
+REDACTED = "<redacted>"
+
+
+def _secret_value(name: str, value: str) -> bool:
+    return not is_placeholder(value) and bool(_known_token(value) or SECRET_NAME.search(name))
+
+
+def redact_args(args: list[str]) -> list[str]:
+    """Arguments with secret values replaced, for reports and baseline fingerprints."""
+    out = list(args)
+    for i, arg in enumerate(args):
+        flag = SECRET_FLAG.match(arg)
+        if flag and flag.group(3):
+            if not is_placeholder(flag.group(3)):
+                out[i] = arg[: len(arg) - len(flag.group(3))] + REDACTED
+        elif flag and i + 1 < len(args) and not is_placeholder(args[i + 1]):
+            out[i + 1] = REDACTED
+        elif _known_token(arg) and not is_placeholder(arg):
+            out[i] = REDACTED
+    return out
+
+
+def redact_url(url: str | None) -> str | None:
+    """URL with secret query values replaced (``?token=...``) and any user:password removed."""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    pairs = parse_qsl(parsed.query, keep_blank_values=True)
+    secret = [_secret_value(k, v) for k, v in pairs]
+    if "@" not in parsed.netloc and not any(secret):
+        return url  # unchanged, so baselines pinned before redaction still match
+    netloc = parsed.netloc
+    if "@" in netloc:
+        netloc = REDACTED + "@" + netloc.rsplit("@", 1)[1]
+    query = "&".join(f"{k}={REDACTED if s else v}" for (k, v), s in zip(pairs, secret, strict=True))
+    return parsed._replace(netloc=netloc, query=query).geturl()
+
+
 # --------------------------------------------------------------------------- BQ-002 pinning
 
 EXACT_VERSION = re.compile(r"^v?\d+\.\d+\.\d+([.\-+][0-9A-Za-z.\-]+)?$")
@@ -231,7 +269,7 @@ def check_pinning(server: Server) -> list[Finding]:
         return []
     if kind != "container image" and version and EXACT_VERSION.match(version):
         return []
-    detail = f"no version" if not version else f"floating version '{version}'"
+    detail = "no version" if not version else f"floating version '{version}'"
     auto = " (auto-install with -y)" if "-y" in server.args or "--yes" in server.args else ""
     return [make_finding(
         "BQ-002", server.name, f"config:{server.name}.args",
@@ -254,7 +292,7 @@ def check_transport(server: Server) -> list[Finding]:
     findings = []
     if parsed.scheme == "http":
         findings.append(make_finding(
-            "BQ-003", server.name, f"config:{server.name}.url", f"Endpoint: {server.url}"))
+            "BQ-003", server.name, f"config:{server.name}.url", f"Endpoint: {redact_url(server.url)}"))
     has_auth = any(AUTH_HEADERS.match(k) for k in server.headers) or any(
         SECRET_NAME.search(k) for k, _ in parse_qsl(parsed.query))
     if not has_auth:
@@ -267,7 +305,9 @@ def check_transport(server: Server) -> list[Finding]:
 # --------------------------------------------------------------------------- BQ-005 scope
 
 BROAD_PATHS = re.compile(
-    r"^(/|~|~/|\$HOME|\$\{HOME\}|%USERPROFILE%|[A-Za-z]:\\?|/home/[^/]+/?|/Users/[^/]+/?|/root/?)$"
+    r"^(/|~|~/|\$HOME|\$\{HOME\}|%USERPROFILE%|[A-Za-z]:[\\/]?|/home/[^/]+/?|/Users/[^/]+/?|/root/?"
+    r"|[A-Za-z]:[\\/]Users[\\/][^\\/]+[\\/]?)$",  # Windows home, as Claude Desktop configs on Windows write it
+    re.IGNORECASE,
 )
 
 
@@ -275,7 +315,7 @@ def check_scope(server: Server) -> list[Finding]:
     findings = []
     for i, arg in enumerate(server.args):
         candidates = [arg]
-        if ":" in arg and not re.match(r"^[A-Za-z]:\\", arg) and "://" not in arg:
+        if ":" in arg and not re.match(r"^[A-Za-z]:[\\/]?", arg) and "://" not in arg:
             candidates.append(arg.split(":", 1)[0])  # docker -v SRC:DST
         if "=" in arg:
             candidates.append(arg.split("=", 1)[1])
@@ -309,10 +349,17 @@ POISON_PATTERNS = [
     (r"\b(secretly|silently|covertly|quietly)\b", "covert behaviour"),
     (r"\byou are now\b|\bnew instructions?\b|\bsystem prompt\b", "role or prompt override"),
     (r"\b(note|message|instructions?) (for|to) the (assistant|model|ai|agent|llm)\b", "message addressed to the model"),
+    # Spanish: the same payloads are trivially translated
+    (r"\bignor[aá]r? (todas )?(las )?(instrucciones|reglas|indicaciones) (anteriores|previas)", "override of prior instructions"),
+    (r"\bno (le )?(digas|cuentes|informes|menciones|avises|muestres|reveles)\b[^.]{0,40}\busuario\b", "concealment from the user"),
+    (r"\bsin (avisarle|avisar|decirle|informarle|informar|contarle|preguntarle)\b[^.]{0,20}\busuario\b", "concealment from the user"),
+    (r"\bantes de (usar|llamar|invocar|ejecutar) (esta|cualquier otra|otra|cualquier|otras) herramientas?\b", "pre-condition on other tool use"),
+    (r"\b(en secreto|silenciosamente|sin que (el usuario|nadie) (lo )?(sepa|note|vea))\b", "covert behaviour"),
+    (r"\b(nota|mensaje|instrucciones?) (para|al) (el )?(asistente|modelo|agente)\b", "message addressed to the model"),
 ]
 POISON_RE = [(re.compile(p, re.IGNORECASE), label) for p, label in POISON_PATTERNS]
 
-INVISIBLE = re.compile("[​-‏‪-‮⁠-⁤⁦-⁩﻿\U000e0000-\U000e007f]")
+INVISIBLE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff\U000e0000-\U000e007f]")
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 PADDING = re.compile(r"[ \t]{40,}|\n{8,}")
 

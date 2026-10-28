@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
-from .checks import make_finding
+from .checks import make_finding, redact_args, redact_url
 from .models import Finding, Server, Tool
 
 BASELINE_FORMAT = 1
@@ -26,12 +26,13 @@ def _hash(obj: object) -> str:
 
 
 def server_fingerprint(server: Server) -> dict:
-    # Env and header *names* are pinned, values are not: rotating a secret is not drift.
+    # Env and header *names* are pinned, values are not: rotating a secret is not drift. Secrets passed as
+    # arguments or in the URL are redacted too, so the baseline file never stores a credential.
     return {
         "transport": server.transport,
         "command": server.command,
-        "args": server.args,
-        "url": server.url,
+        "args": redact_args(server.args),
+        "url": redact_url(server.url),
         "env_keys": sorted(server.env),
         "header_keys": sorted(server.headers),
     }
@@ -74,12 +75,22 @@ def load_baseline(path: str | Path) -> dict:
 
 
 @dataclass
+class Change:
+    """A modified component, with both definitions kept so a report can show the diff."""
+    server: str
+    tool: str | None
+    before: dict
+    after: dict
+
+
+@dataclass
 class Reconciliation:
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
     modified: list[str] = field(default_factory=list)
     unchanged: int = 0
     findings: list[Finding] = field(default_factory=list)
+    changes: list[Change] = field(default_factory=list)
 
     @property
     def total_compared(self) -> int:
@@ -119,6 +130,7 @@ def reconcile(servers: list[Server], baseline: dict) -> Reconciliation:
         else:
             changed = _changed_fields(entry["config"], cfg)
             rec.modified.append(f"server:{name}")
+            rec.changes.append(Change(name, None, entry["config"], cfg))
             detail = "; ".join(
                 f"{k}: {_short(entry['config'].get(k))} -> {_short(cfg.get(k))}" for k in changed)
             rec.findings.append(make_finding(
@@ -147,6 +159,7 @@ def reconcile(servers: list[Server], baseline: dict) -> Reconciliation:
             old_def = old_tools[tname]["definition"]
             changed = _changed_fields(old_def, fp)
             rec.modified.append(f"tool:{name}/{tname}")
+            rec.changes.append(Change(name, tname, old_def, fp))
             evidence = f"Changed {', '.join(changed)}"
             if "description" in changed:
                 evidence += (f". Before: \"{_short(old_def['description'])}\" "
